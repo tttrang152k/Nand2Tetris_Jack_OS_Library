@@ -1,0 +1,180 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/12/Screen.jack
+/**
+ * A library of functions for displaying graphics on the screen.
+ * The Hack physical screen consists of 512 rows (indexed 0..511, top to bottom)
+ * of 256 pixels each (indexed 0..255, left to right). The top left pixel on 
+ * the screen is indexed (0,0).
+ */
+class Screen {
+
+    static Array screenMemory;     // Base address of the screen (RAM[16384])
+    static boolean drawColor;      // true = black (set pixel), false = white (clear pixel)
+
+    /** Initializes the screen and default drawing color (black). */
+    function void init() {
+        let screenMemory = 16384; // Memory-mapped screen start address
+        let drawColor = true;     // Default color: black (i.e., draw pixel)
+        return;
+    }
+
+    /** Clears the entire screen by setting all bits to 0 (white). */
+    function void clearScreen() {
+        var int i;
+        let i = 0;
+        while (i < 8192) {
+            let screenMemory[i] = false;
+        }
+        return;
+    }
+
+    /**
+     * Sets the color used for future drawing operations.
+     * @param b true for black (set pixel), false for white (clear pixel)
+     */
+    function void setColor(boolean b) {
+        let drawColor = b;
+        return;
+    }
+
+    /**
+     * Draws or clears a single pixel at screen coordinate (x, y).
+     * Each memory word (screenMemory[i]) controls 16 horizontal pixels.
+     */
+    function void drawPixel(int x, int y) {
+        var int pixelAddress, bitMask;
+
+        let pixelAddress = (y * 32) + (x / 16);               // Find screen word for (x, y)
+        let bitMask = Math.powerOfTwo(x & 15);                // Bit mask for the specific pixel
+
+        if (drawColor) {
+            let screenMemory[pixelAddress] = screenMemory[pixelAddress] | bitMask; // Set bit
+        } else {
+            let screenMemory[pixelAddress] = screenMemory[pixelAddress] & ~bitMask; // Clear bit
+        }
+
+        return;
+    }
+
+    /**
+     * Draws a straight line from (x1, y1) to (x2, y2).
+     * Handles vertical, horizontal, and simple diagonal lines.
+     */
+    function void drawLine(int x1, int y1, int x2, int y2) {
+        var int dx, dy, stepX, stepY, temp, errorTerm;
+
+        // Ensure left-to-right drawing
+        if (x1 > x2) {
+            let temp = x1; let x1 = x2; let x2 = temp;
+            let temp = y1; let y1 = y2; let y2 = temp;
+        }
+
+        let dx = x2 - x1;
+        let dy = y2 - y1;
+        let stepX = 0;
+        let stepY = 0;
+
+        if (dy = 0) {
+            // Horizontal line
+            do Screen.drawHLine(x1, x2, y1);
+        } else {
+            if (dx = 0) {
+                // Vertical line
+                do Screen.drawVLine(x1, y1, y2);
+            } else {
+                // Diagonal (or sloped) line using Bresenham-like algorithm
+                let errorTerm = 0;
+
+                if (y1 < y2) {
+                    // Line going downwards
+                    while (~(stepX > dx) & ~(stepY > dy)) {
+                        do Screen.drawPixel(x1 + stepX, y1 + stepY);
+                        if (errorTerm > 0) {
+                            let stepX = stepX + 1;
+                            let errorTerm = errorTerm - dx;
+                        } else {
+                            let stepY = stepY + 1;
+                            let errorTerm = errorTerm + dy;
+                        }
+                    }
+                } else {
+                    // Line going upwards
+                    while (~(stepX > dx) & ~(stepY < dy)) {
+                        do Screen.drawPixel(x1 + stepX, y1 - stepY);
+                        if (errorTerm > 0) {
+                            let stepX = stepX + 1;
+                            let errorTerm = errorTerm - dx;
+                        } else {
+                            let stepY = stepY + 1;
+                            let errorTerm = errorTerm + dy;
+                        }
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    /** Draws a horizontal line from x1 to x2 at y. */
+    function void drawHLine(int x1, int x2, int y) {
+        var int temp;
+        if (x1 > x2) {
+            let temp = x1;
+            let x1 = x2;
+            let x2 = temp;
+        }
+        while (~(x2 < x1)) {
+            do Screen.drawPixel(x1, y);
+            let x1 = x1 + 1;
+        }
+        return;
+    }
+
+    /** Draws a vertical line from y1 to y2 at x. */
+    function void drawVLine(int x, int y1, int y2) {
+        var int temp;
+        if (y1 > y2) {
+            let temp = y1;
+            let y1 = y2;
+            let y2 = temp;
+        }
+        while (~(y2 < y1)) {
+            do Screen.drawPixel(x, y1);
+            let y1 = y1 + 1;
+        }
+        return;
+    }
+
+    /**
+     * Draws a filled rectangle from (x1, y1) to (x2, y2).
+     * Uses horizontal lines for efficiency.
+     */
+    function void drawRectangle(int x1, int y1, int x2, int y2) {
+        while (~(y1 > y2)) {
+            do Screen.drawHLine(x1, x2, y1);
+            let y1 = y1 + 1;
+        }
+        return;
+    }
+
+    /**
+     * Draws a filled circle centered at (cx, cy) with radius r.
+     * Uses midpoint circle rasterization.
+     */
+    function void drawCircle(int cx, int cy, int r) {
+        var int dx, dy;
+        var int rSquared;
+
+        let dy = -r;
+        let rSquared = r * r;
+
+        while (~(dy > r)) {
+            let dx = Math.sqrt(rSquared - (dy * dy));
+            do Screen.drawHLine(cx - dx, cx + dx, cy + dy);
+            let dy = dy + 1;
+        }
+        return;
+    }
+}

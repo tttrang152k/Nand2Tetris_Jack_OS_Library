@@ -1,0 +1,167 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/12/Memory.jack
+/**
+ * This library provides two services: direct access to the computer's main
+ * memory (RAM), and allocation and recycling of memory blocks. The Hack RAM
+ * consists of 32,768 words, each holding a 16-bit binary number.
+ */ 
+class Memory {
+
+    // user-defined variables:
+    static Array ram;          // Simulated physical memory
+    static Array freeBlocks;   // Linked list of free memory blocks
+    static int heapStart;      // Base of the heap (2048)
+    static int heapEnd;        // End of the heap (16384)
+
+    // Offsets into a block structure
+    static int BLOCK_SIZE_OFFSET;  // Offset for the block size field (0)
+    static int NEXT_BLOCK_OFFSET;  // Offset for the next block pointer (1)
+    static int ALLOC_META_OFFSET;  // Offset -1 used to store allocated block's size
+
+    /** Initializes the class. */
+    function void init() {
+        let heapStart = 2048;
+        let heapEnd = 16384;
+
+        let ram = 0;  // Simulated memory base
+        let freeBlocks = heapStart;
+
+        let BLOCK_SIZE_OFFSET = 0;
+        let NEXT_BLOCK_OFFSET = 1;
+        let ALLOC_META_OFFSET = -1;
+
+        let freeBlocks[BLOCK_SIZE_OFFSET] = heapEnd - heapStart;
+        let freeBlocks[NEXT_BLOCK_OFFSET] = null;
+
+        return;
+    }
+
+    /** Returns the RAM value at the given address. */
+    function int peek(int address) {
+        return ram[address];
+    }
+
+    /** Sets the RAM value at the given address to the given value. */
+    function void poke(int address, int value) {
+        let ram[address] = value;
+        return;
+    }
+
+    /** Finds an available RAM block of the given size and returns
+     *  a reference to its base address. */
+    function Array alloc(int size) {
+        var Array selected, next, result;
+
+        let selected = Memory.findBestFit(size);
+        let result = selected + 1;
+
+        if (~(selected = null)) {
+
+            if (selected[BLOCK_SIZE_OFFSET] > (size + 3)) {
+                // Split block
+                let next = selected + size + 1;
+                let next[NEXT_BLOCK_OFFSET] = selected[NEXT_BLOCK_OFFSET];
+                let next[BLOCK_SIZE_OFFSET] = selected[BLOCK_SIZE_OFFSET] - size - 1;
+
+                let result[ALLOC_META_OFFSET] = size + 1;
+                let freeBlocks = next;
+            } else {
+                // Use whole block
+                let next = selected[NEXT_BLOCK_OFFSET];
+                let result[ALLOC_META_OFFSET] = selected[BLOCK_SIZE_OFFSET];
+            }
+
+            let selected = next;
+        }
+
+        return result;
+    }
+
+    /** De-allocates the given object (cast as an array) by making
+     *  it available for future allocations. */
+    function void deAlloc(Array pointer) {
+        var Array previous, next;
+        var int size;
+
+        let size = pointer[ALLOC_META_OFFSET];
+        let pointer = pointer - 1;
+
+        let previous = Memory.locatePreviousFree(pointer);
+
+        if (previous = null) {
+            let pointer[BLOCK_SIZE_OFFSET] = size;
+            let pointer[NEXT_BLOCK_OFFSET] = freeBlocks;
+            let freeBlocks = pointer;
+        } else {
+            if ((previous + previous[BLOCK_SIZE_OFFSET]) = pointer) {
+                // Merge with previous
+                let previous[BLOCK_SIZE_OFFSET] = previous[BLOCK_SIZE_OFFSET] + size;
+                let pointer = previous;
+            } else {
+                // Link after previous
+                let pointer[BLOCK_SIZE_OFFSET] = size;
+                let pointer[NEXT_BLOCK_OFFSET] = previous[NEXT_BLOCK_OFFSET];
+                let previous[NEXT_BLOCK_OFFSET] = pointer;
+            }
+        }
+
+        // Try merging with next
+        if ((pointer + pointer[BLOCK_SIZE_OFFSET]) = pointer[NEXT_BLOCK_OFFSET]) {
+            let next = pointer[NEXT_BLOCK_OFFSET];
+            let pointer[BLOCK_SIZE_OFFSET] = pointer[BLOCK_SIZE_OFFSET] + next[BLOCK_SIZE_OFFSET];
+            let pointer[NEXT_BLOCK_OFFSET] = next[NEXT_BLOCK_OFFSET];
+        }
+
+        return;
+    }    
+
+    /** List of helper functions **/
+    // ------------------------------------
+    // Finds the best-fit block in the free list for a given size
+    function Array findBestFit(int requestSize) {
+        var Array current, best;
+        var int currentSize, bestSize;
+
+        let best = null;
+        let bestSize = heapEnd - heapStart;
+        let current = freeBlocks;
+
+        if (current[NEXT_BLOCK_OFFSET] = null) {
+            return current;
+        }
+
+        while (~(current = null)) {
+            let currentSize = current[BLOCK_SIZE_OFFSET] - 1;
+
+            if (~(currentSize < requestSize) & (currentSize < bestSize)) {
+                let best = current;
+                let bestSize = currentSize;
+            }
+
+            let current = current[NEXT_BLOCK_OFFSET];
+        }
+
+        return best;
+    }
+
+    // Finds the free block immediately before a given block
+    function Array locatePreviousFree(int pointer) {
+        var Array previous;
+
+        if (freeBlocks > pointer) {
+            return null;
+        }
+
+        let previous = freeBlocks;
+
+        while (~(previous[NEXT_BLOCK_OFFSET] = null) & (previous[NEXT_BLOCK_OFFSET] < pointer)) {
+            let previous = previous[NEXT_BLOCK_OFFSET];
+        }
+
+        return previous;
+    }
+    // ------------------------------------
+
+}
